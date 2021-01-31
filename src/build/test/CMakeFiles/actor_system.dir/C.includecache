@@ -1,0 +1,30 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/misza/studia/sem3/pw/Cacti/src/cacti.h
+stddef.h
+-
+
+/home/misza/studia/sem3/pw/Cacti/src/test/actorSystem_test.c
+pthread.h
+-
+stdio.h
+-
+unistd.h
+-
+stdlib.h
+-
+assert.h
+-
+errno.h
+-
+string.h
+-
+../cacti.h
+/home/misza/studia/sem3/pw/Cacti/src/cacti.h
+

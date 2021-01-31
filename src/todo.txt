@@ -1,0 +1,5 @@
+add sigint
+
+silnia
+
+macierz

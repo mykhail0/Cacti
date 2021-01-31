@@ -1,0 +1,2 @@
+/usr/bin/ar qc libcacti.a  CMakeFiles/cacti.dir/cacti.c.o
+/usr/bin/ranlib libcacti.a

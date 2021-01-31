@@ -1,0 +1,1 @@
+/usr/bin/cc -g -Wall -Wextra -pthread  -rdynamic CMakeFiles/deadlock.dir/deadLock_test.c.o  -o deadlock  ../libcacti.a 
