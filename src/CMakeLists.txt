@@ -1,10 +1,12 @@
-cmake_minimum_required (VERSION 3.1)
+cmake_minimum_required (VERSION 4.3)
 project (CACTI)
 
 enable_testing()
 
-#set(CMAKE_C_STANDARD ...)
-set(CMAKE_C_FLAGS "-g -Wall -Wextra -pthread")
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS "-Wall -Wextra -pthread")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-pedantic -Werror -fstack-protector-strong -g")
 
 # http://stackoverflow.com/questions/10555706/
 macro (add_executable _name)
@@ -15,9 +17,9 @@ macro (add_executable _name)
   endif()
 endmacro()
 
-add_library(cacti STATIC cacti.c)
-add_executable(macierz macierz.c)
-add_executable(silnia silnia.c)
+add_library(cacti STATIC cacti.c err.c)
+add_executable(matrix matrix.c)
+add_executable(factorial factorial.c)
 add_subdirectory(test)
 
 install(TARGETS cacti DESTINATION .)

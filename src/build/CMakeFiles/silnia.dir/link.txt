@@ -1,1 +1,0 @@
-/usr/bin/cc -g -Wall -Wextra -pthread  -rdynamic CMakeFiles/silnia.dir/silnia.c.o  -o silnia  libcacti.a 

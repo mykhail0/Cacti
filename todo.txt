@@ -1,0 +1,3 @@
+* Brak obsługi sygnałów
+* Program przykładowy macierz, obliczający za pomocą aktorów sumy wierszy z zadanej tablicy (0/1 pkt).
+* Alokacja bez sprawdzania poprawności zaalokowania (from_son)
