@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern int sys_nerr;
+
 void syserr() {
   fprintf(stderr, "ERROR: (%d; %s)\n", errno, strerror(errno));
   exit(EXIT_FAILURE);
