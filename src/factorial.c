@@ -1,8 +1,9 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "cacti.h"
-#include "err.h"
+#include "error.h"
 
 /*
 The program receives a single number `n` on standard input and calculates the
@@ -40,7 +41,7 @@ typedef struct {
 void hello_handler(void** stateptr, size_t nbytes, void* data) {
   (void)nbytes;
   if (NULL == (*stateptr = malloc(sizeof(state_t)))) {
-    syserr();
+    syserr(errno, "Cannot allocate agent's state.\n");
   }
   actor_id_t self_id = actor_id_self();
   message_t msg_greet = {.message_type = MSG_GREET,

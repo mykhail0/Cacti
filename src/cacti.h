@@ -68,6 +68,7 @@ extern void actor_system_join(actor_id_t actor);
 
 extern const int DEAD_ACTOR;
 extern const int UNKNOWN_ACTOR;
+extern const int SYSTEM_NOT_CREATED;
 
 // Send a given message to a given actor. Return `0` if the operation succeeds,
 // `-1` if the actor does not accept messages (TODO MSG_GODIE), `-2` if the

@@ -1,6 +1,7 @@
 #include "queue.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,7 +12,7 @@ static inline void* get_element_ptr(queue_t* q, size_t i) {
   return ((unsigned char*)q->arr) + i * q->size;
 }
 
-bool que_ctor(queue_t* q, size_t size, size_t max_capacity) {
+int que_ctor(queue_t* q, size_t size, size_t max_capacity) {
   assert(max_capacity > 0);
   assert(size > 0);
   q->MAX_CAPACITY = max_capacity;
@@ -25,11 +26,11 @@ bool que_ctor(queue_t* q, size_t size, size_t max_capacity) {
   void* tmp = malloc(q->size);
   if (tmp == NULL) {
     q->capacity = 0;
-    return false;
+    return errno;
   }
 
   q->arr = tmp;
-  return true;
+  return 0;
 }
 
 void que_dtor(queue_t* q) {
@@ -42,7 +43,8 @@ void que_dtor(queue_t* q) {
 }
 
 // Reallocates the queues's cyclic buffer if needed.
-// Returns `true` iff the reallocation was successful or was not needed.
+// Returns `0` iff the reallocation was successful or was not needed, an
+// errno-like error code otherwise.
 static bool que_reall(queue_t* q) {
   if (q->empty || q->head != q->tail) return true;
   if (q->capacity == q->MAX_CAPACITY) return false;
@@ -53,7 +55,7 @@ static bool que_reall(queue_t* q) {
   void* tmp = realloc(q->arr, q->size * q->capacity);
   if (tmp == NULL) {
     q->capacity = old_capacity;
-    return false;
+    return errno;
   }
 
   q->arr = tmp;
@@ -68,15 +70,16 @@ static bool que_reall(queue_t* q) {
     memmove(get_element_ptr(q, q->head), get_element_ptr(q, q->tail),
             begin_len * q->size);
   }
-  return true;
+  return 0;
 }
 
-bool que_push(queue_t* q, void const* element) {
-  if (!que_reall(q)) return false;
+int que_push(queue_t* q, void const* element) {
+  int ret = que_reall(q);
+  if (ret != 0) return ret;
   memcpy(get_element_ptr(q, q->tail), element, q->size);
   q->tail = (q->tail + 1) % q->capacity;
   q->empty = false;
-  return true;
+  return 0;
 }
 
 bool que_pop(queue_t* q, void* element) {

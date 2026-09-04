@@ -1,10 +1,10 @@
-#ifndef _ERR_
-#define _ERR_
+#ifndef ERROR_H
+#define ERROR_H
 
-/* print system call error message and terminate */
-extern void syserr(int bl, const char *fmt, ...);
+// Print system call error message and terminate.
+extern void syserr(int bl, const char* fmt, ...);
 
-/* print error message and terminate */
-extern void fatal(const char *fmt, ...);
+// Print error message and terminate.
+extern void fatal(const char* fmt, ...);
 
-#endif
+#endif  // ERROR_H

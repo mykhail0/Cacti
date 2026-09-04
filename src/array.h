@@ -19,14 +19,18 @@ typedef struct {
   size_t filled;
 } array_t;
 
-// Array constructor. Return `true` iff initialized successfully.
-extern bool arr_ctor(array_t* arr, size_t size, size_t max_capacity);
-
-// Reallocates the array if the size approached the not maxxed out capacity.
-// Return `true` iff reallocated successfully or no reallocation needed.
-extern bool arr_reall(array_t* arr);
+// Array constructor.
+// Return `0` iff initialized successfully, an errno-like error code otherwise.
+extern int arr_ctor(array_t* arr, size_t size, size_t max_capacity);
 
 // Array destructor.
 extern void arr_dtor(array_t* arr);
+
+// Return a pointer to the i'th element in a given array.
+extern void* arr_at(array_t* arr, size_t i);
+
+// Append an element to the end of the array.
+// Return `0` iff appended successfully, an errno-like error code otherwise.
+extern int arr_append(array_t* arr, void const* act);
 
 #endif  // ARRAY_H
