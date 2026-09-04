@@ -31,6 +31,6 @@ extern void* arr_at(array_t* arr, size_t i);
 
 // Append an element to the end of the array.
 // Return `0` iff appended successfully, an errno-like error code otherwise.
-extern int arr_append(array_t* arr, void const* act);
+extern int arr_append(array_t* arr, void const* element_ptr);
 
 #endif  // ARRAY_H

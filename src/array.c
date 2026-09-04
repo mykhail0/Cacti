@@ -21,7 +21,7 @@ int arr_ctor(array_t* arr, size_t size, size_t max_capacity) {
   arr->filled = 0;
   arr->size = size;
 
-  void* tmp = realloc(arr->arr, arr->size * arr->capacity);
+  void* tmp = calloc(arr->capacity, arr->size);
   if (tmp == NULL) {
     arr->capacity = 0;
     return errno;
@@ -41,12 +41,12 @@ void arr_dtor(array_t* arr) {
 // Reallocate the array if the size approached the not maxxed out capacity.
 // Return `0` iff reallocated successfully or no reallocation needed, an
 // errno-like error code otherwise.
-static bool arr_reall(array_t* arr) {
-  if (arr->filled < arr->capacity) return true;
+static int arr_reall(array_t* arr) {
+  if (arr->filled < arr->capacity) return 0;
   assert(arr->capacity > 0);
   assert(arr->filled == arr->capacity);
 
-  if (arr->capacity == arr->MAX_CAPACITY) return false;
+  if (arr->capacity == arr->MAX_CAPACITY) return EAGAIN;
   assert(arr->capacity < arr->MAX_CAPACITY);
 
   size_t previous = arr->capacity;
@@ -66,10 +66,10 @@ void* arr_at(array_t* arr, size_t i) {
   return i < arr->filled ? get_element_ptr(arr, i) : NULL;
 }
 
-int arr_append(array_t* arr, void const* element) {
+int arr_append(array_t* arr, void const* element_ptr) {
   int ret = arr_reall(arr);
   if (ret != 0) return ret;
-  memcpy(get_element_ptr(arr, arr->filled - 1), element, arr->size);
+  memcpy(get_element_ptr(arr, arr->filled), element_ptr, arr->size);
   ++(arr->filled);
   return 0;
 }

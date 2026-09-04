@@ -29,8 +29,8 @@ static act_t PROMPTS[NPROMPTS] = {hello_handler, factorial_handler,
                                   greet_handler};
 static role_t ROLE = {.nprompts = NPROMPTS, .prompts = PROMPTS};
 
-static const size_t MSG_GREET = 1;
-static const size_t MSG_FACTORIAL = 2;
+static const size_t MSG_FACTORIAL = 1;
+static const size_t MSG_GREET = 2;
 
 typedef struct {
   unsigned long long accumulated_factorial;
@@ -47,10 +47,9 @@ void hello_handler(void** stateptr, size_t nbytes, void* data) {
   message_t msg_greet = {.message_type = MSG_GREET,
                          .nbytes = sizeof self_id,
                          .data = (void*)self_id};
-  int ret = send_message(*(actor_id_t*)data, msg_greet);
-  if (ret != 0) {
-    fprintf(stderr, "Hello handler can't send greet message, error: %d\n", ret);
-    exit(EXIT_FAILURE);
+  int ret = send_message((actor_id_t)data, msg_greet);
+  if (ret != 0 && ret != UNKNOWN_ACTOR) {
+    fatal("Hello handler can't send greet message, error: %d\n", ret);
   }
 }
 
@@ -75,9 +74,7 @@ void factorial_handler(void** stateptr, size_t nbytes, void* data) {
         .message_type = MSG_SPAWN, .nbytes = sizeof ROLE, .data = &ROLE};
     int ret = send_message(actor_id_self(), msg_spawn);
     if (ret != 0) {
-      fprintf(stderr, "Factorial handler can't send spawn message, error: %d\n",
-              ret);
-      exit(EXIT_FAILURE);
+      fatal("Factorial handler can't send spawn message, error: %d\n", ret);
     }
   }
 }
@@ -88,11 +85,9 @@ void greet_handler(void** stateptr, size_t nbytes, void* data) {
   message_t msg_factorial = {.message_type = MSG_FACTORIAL,
                              .nbytes = sizeof(state_t),
                              .data = *stateptr};
-  int ret = send_message(*(actor_id_t*)data, msg_factorial);
+  int ret = send_message((actor_id_t)data, msg_factorial);
   if (ret != 0) {
-    fprintf(stderr, "Greet handler can't send factorial message, error: %d\n",
-            ret);
-    exit(EXIT_FAILURE);
+    fatal("Greet handler can't send factorial message, error: %d\n", ret);
   }
 }
 
@@ -108,10 +103,7 @@ int main() {
                              .nbytes = sizeof zero_state,
                              .data = &zero_state};
   int ret = send_message(first, msg_factorial);
-  if (ret != 0) {
-    fprintf(stderr, "Can't send initial factorial message, error: %d\n", ret);
-    exit(EXIT_FAILURE);
-  }
+  if (ret != 0) fatal("Can't send initial factorial message, error: %d\n", ret);
 
   actor_system_join(first);
   return 0;

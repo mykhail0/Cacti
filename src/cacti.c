@@ -20,6 +20,8 @@
 #include <semaphore.h>
 */
 
+static pthread_mutexattr_t attr;
+
 void key_delete(pthread_key_t key) {
   int ret = pthread_key_delete(key);
   if (ret != 0) syserr(ret, "Failed key delete.\n");
@@ -77,23 +79,10 @@ static int actor_ctor(actor_t* actor, actor_id_t id, role_t role) {
     syserr(ret, "Message queue creation failed.\n");
   }
 
-  // TODO do this once somewhere
-  pthread_mutexattr_t attr;
-  ret = pthread_mutexattr_init(&attr);
-  if (ret != 0) syserr(ret, "Mutexattr init failed.\n");
-#ifndef NDEBUG
-  if (0 != (ret = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK))) {
-    syserr(ret, "Mutexattr settype failed.\n");
-  }
-#endif
   if (0 != (ret = pthread_mutex_init(&(actor->mutex), &attr))) {
-    pthread_mutexattr_destroy(&attr);
     que_dtor(&(actor->mailbox));
     // Because pthread_mutex_init always returns `0`.
     syserr(ret, "Mutex init failed.\n");
-  }
-  if (0 != (ret = pthread_mutexattr_destroy(&attr))) {
-    syserr(ret, "Mutexattr destroy failed.\n");
   }
 
   return 0;
@@ -177,7 +166,7 @@ static int add_actor(system_t* s, actor_id_t* actor, role_t role) {
     syserr(ret, "Actor construction failed.\n");
   }
 
-  if (0 != (ret = arr_append(&(s->actors), act))) {
+  if (0 != (ret = arr_append(&(s->actors), &act))) {
     actor_dtor(act);
     syserr(ret, "Appending actor to array failed.\n");
   }
@@ -192,7 +181,7 @@ static int add_actor(system_t* s, actor_id_t* actor, role_t role) {
 static int handle_actor_request(system_t* s, actor_id_t act_id) {
   // Getting actor.
   mutex_lock(&(s->act_mutex));
-  actor_t* actor = arr_at(&(s->actors), act_id);
+  actor_t* actor = *(actor_t**)arr_at(&(s->actors), act_id);
   mutex_unlock(&(s->act_mutex));
 
   // TODO return code
@@ -207,8 +196,6 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
 
   // Can process the actor's message after successful retrieval.
   if (msg_succ) {
-    // printf("actor %ld handling %ld message\n", act_id, message.message_type);
-
     if (message.message_type == MSG_SPAWN) {
       actor_id_t actor_to_add;
 
@@ -292,7 +279,7 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
 }
 
 // Working function of a thread.
-void* work_func(void* arg) {
+static void* work_func(void* arg) {
   system_t* s = arg;
   if (s == NULL) return NULL;
 
@@ -336,72 +323,65 @@ void* work_func(void* arg) {
 }
 
 // Clearing actor's resources before freeing actor's array.
-void clear_act_arr(array_t* arr) {
+static void clear_act_arr(array_t* arr) {
   for (size_t i = 0; i < arr->filled; ++i) {
-    actor_t* actor = arr_at(arr, i);
+    actor_t* actor = *(actor_t**)arr_at(arr, i);
     actor_dtor(actor);
     free(actor);
   }
 }
 
 // Constructs the actor system.
-int system_ctor(system_t* s) {
+static int system_ctor(system_t* s) {
   if (s == NULL || s->created) {
-    printf("was created\n");
-    return -1;
+    fatal("System was already created\n.");
   }
 
   s->created = false;
   // Cant be 0 because work_funcs would stop (because dead_cnt == #actors == 0)
   s->dead_cnt = -1;
 
-  if (pthread_mutex_init(&(s->act_mutex), NULL) != 0) {
-    printf("couldnt init act mutex\n");
-    return -1;
+  int ret = pthread_mutex_init(&(s->act_mutex), &attr);
+  if (ret != 0) {
+    // Because pthread_mutex_init always returns `0`.
+    syserr(ret, "Mutex init failed.\n");
   }
 
-  if (arr_ctor(&(s->actors), sizeof(actor_t*), CAST_LIMIT) != 0) {
-    printf("couldnt act_ctor\n");
+  if (0 != (ret = arr_ctor(&(s->actors), sizeof(actor_t*), CAST_LIMIT))) {
     mutex_destroy(&(s->act_mutex));
-    return -1;
+    syserr(ret, "actors array ctor fail.\n");
   }
 
-  if (pthread_mutex_init(&(s->mutex), NULL) != 0) {
-    printf("couldnt mutex init\n");
+  ret = pthread_mutex_init(&(s->mutex), &attr);
+  if (ret != 0) {
     clear_act_arr(&(s->actors));
     arr_dtor(&(s->actors));
     mutex_destroy(&(s->act_mutex));
-    return -1;
+    // Because pthread_mutex_init always returns `0`.
+    syserr(ret, "Mutex init failed.\n");
   }
 
-  if (!que_ctor(&(s->actors_q), sizeof(actor_id_t), INF)) {
-    printf("couldnt que ctor\n");
+  if (0 != (ret = que_ctor(&(s->actors_q), sizeof(actor_id_t), INF))) {
     mutex_destroy(&(s->mutex));
     clear_act_arr(&(s->actors));
     arr_dtor(&(s->actors));
     mutex_destroy(&(s->act_mutex));
-    return -1;
+    syserr(ret, "Queue of actors construction fail.\n");
   }
 
   if (pthread_cond_init(&(s->work_cond), NULL) != 0) {
-    printf("couldnt cond init\n");
     que_dtor(&(s->actors_q));
     mutex_destroy(&(s->mutex));
     clear_act_arr(&(s->actors));
     arr_dtor(&(s->actors));
     mutex_destroy(&(s->act_mutex));
-    return -1;
+    fatal("pthread_cond_init() should never return an error code.\n");
   }
 
   for (int i = 0; i < POOL_SIZE; ++i) {
     int ret = pthread_create(&(s->threads[i]), NULL, work_func, s);
     if (ret != 0) {
-      ret = pthread_cond_destroy(&(s->work_cond));
-      if (ret != 0) {
-        syserr(ret,
-               "pthread_cond_destroy() fail while cleaning up after "
-               "pthread_create fail.\n");
-      }
+      pthread_cond_destroy(&(s->work_cond));
       que_dtor(&(s->actors_q));
       mutex_destroy(&(s->mutex));
       clear_act_arr(&(s->actors));
@@ -415,7 +395,7 @@ int system_ctor(system_t* s) {
   return 0;
 }
 
-int system_dtor(system_t* s) {
+static int system_dtor(system_t* s) {
   if (s == NULL) return 0;
 
   for (int i = 0; i < POOL_SIZE; ++i) {
@@ -450,18 +430,24 @@ int actor_system_create(actor_id_t* actor, role_t* const role) {
   if (ret != 0) {
     syserr(ret, "PTHREAD_KEYS_MAX keys are already allocated.\n");
   }
+
+  ret = pthread_mutexattr_init(&attr);
+  if (ret != 0) syserr(ret, "Mutexattr init failed.\n");
+#ifndef NDEBUG
+  if (0 != (ret = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK))) {
+    syserr(ret, "Mutexattr settype failed.\n");
+  }
+#endif
   if (system_ctor(&sys) != 0) {
-    printf("ctor no success\n");
     key_delete(thread_spec_act);
-    return -1;
+    fatal("system_ctor fail.\n");
   }
   mutex_lock(&(sys.mutex));
   mutex_lock(&(sys.act_mutex));
   if (add_actor(&sys, actor, *role) != 0) {
-    printf("adding no success\n");
     key_delete(thread_spec_act);
     mutex_unlock(&(sys.act_mutex));
-    return -1;
+    fatal("Initial actor addition fail.\n");
   }
   ++sys.dead_cnt;  // now is rightfully 0 and wont end threads prematurely.
   mutex_unlock(&(sys.act_mutex));
@@ -472,7 +458,7 @@ int actor_system_create(actor_id_t* actor, role_t* const role) {
                                          .nbytes = sizeof placeholder,
                                          .data = (void*)placeholder});
   if (ret != 0) {
-    fatal("Couldn't send a MSG_HELLO message to the initial actor: %d.\n", ret);
+    fatal("A MSG_HELLO message to the initial actor not sent: %d.\n", ret);
   }
 
   return 0;
@@ -482,6 +468,9 @@ void actor_system_join(actor_id_t actor) {
   if (actor < 0 || sys.actors.filled <= (size_t)actor) return;
   int ret = system_dtor(&sys);
   if (ret != 0) fatal("System destruction failed: %d.\n", ret);
+  if (0 != (ret = pthread_mutexattr_destroy(&attr))) {
+    syserr(ret, "Mutexattr destroy failed.\n");
+  }
   key_delete(thread_spec_act);
 }
 
@@ -494,32 +483,31 @@ int send_message(actor_id_t actor, message_t message) {
 
   // Getting the actor.
   if (actor < 0) return UNKNOWN_ACTOR;
-  if (pthread_mutex_lock(&(sys.act_mutex)) != 0) return -3;
-  actor_t* actor_v = arr_at(&(sys.actors), actor);
+  mutex_lock(&(sys.act_mutex));
+  actor_t* actor_v = *(actor_t**)arr_at(&(sys.actors), actor);
   mutex_unlock(&(sys.act_mutex));
-  if (actor_v == NULL) return -2;
+  if (actor_v == NULL) return UNKNOWN_ACTOR;
 
-  if (pthread_mutex_lock(&(actor_v->mutex)) != 0) return -3;
+  mutex_lock(&(actor_v->mutex));
   if (actor_v->dead) {
     mutex_unlock(&(actor_v->mutex));
-    return -1;
+    return DEAD_ACTOR;
   }
 
   // Inserting the message.
-  if (que_push(&(actor_v->mailbox), &message) != 0) {
+  int ret = que_push(&(actor_v->mailbox), &message);
+  if (ret != 0) {
     mutex_unlock(&(actor_v->mutex));
-    return -3;
+    syserr(ret, "Pushing a message to actor's mailbox fail.\n");
   }
 
   // Inserting the actor to the queue if it is not present.
   if (!(actor_v->working)) {
-    // printf("actor %ld not working but soon to change\n", actor);
     actor_v->working = true;
     mutex_unlock(&(actor_v->mutex));
 
     mutex_lock(&(sys.mutex));
-    int ret = que_push(&(sys.actors_q), &actor);
-    if (ret != 0) {
+    if (0 != (ret = que_push(&(sys.actors_q), &actor))) {
       mutex_unlock(&(sys.mutex));
       syserr(ret, "que_push failed.\n");
     }

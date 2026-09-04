@@ -45,9 +45,9 @@ void que_dtor(queue_t* q) {
 // Reallocates the queues's cyclic buffer if needed.
 // Returns `0` iff the reallocation was successful or was not needed, an
 // errno-like error code otherwise.
-static bool que_reall(queue_t* q) {
-  if (q->empty || q->head != q->tail) return true;
-  if (q->capacity == q->MAX_CAPACITY) return false;
+static int que_reall(queue_t* q) {
+  if (q->empty || q->head != q->tail) return 0;
+  if (q->capacity == q->MAX_CAPACITY) return EAGAIN;
 
   size_t old_capacity = q->capacity;
   q->capacity = min(old_capacity * MULTIPLIER, q->MAX_CAPACITY);
@@ -74,6 +74,7 @@ static bool que_reall(queue_t* q) {
 }
 
 int que_push(queue_t* q, void const* element) {
+  assert(q->capacity > 0);
   int ret = que_reall(q);
   if (ret != 0) return ret;
   memcpy(get_element_ptr(q, q->tail), element, q->size);
