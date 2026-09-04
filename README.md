@@ -7,7 +7,7 @@ This project implements a certain version of the
 
 In short, actors are a processing mechanism that allows for multi-threaded
 execution of a set of tasks within a single program. An actor is an entity that
-accepts a set of messages. Accepting a message of a given kind meanse the
+accepts a set of messages. Accepting a message of a given kind means the
 execution of a certain imperative calculation, which can have side effects, e.g.
 transforming some global data structure, but also creating new actors and
 sending messages to some existing actors. The messages sent in this model are
@@ -15,7 +15,7 @@ asynchronous. In this project, the work of actors is performed by a thread pool,
 while the number of actors can be significantly larger than the number of
 threads.
 
-This library relies only on `pthreads` library for multithreading purposes.
+This library relies only on `pthreads` library for multi-threading purposes.
 
 ## Compilation
 
@@ -68,7 +68,7 @@ its array of handlers.
 
 #### `MSG_SPAWN`
 
-Handler of this message type interpretes the `data` field as `role_t`. It
+Handler of this message type interprets the `data` field as `role_t`. It
 spawns a new actor with its handler lookup table defined as that and next sends
 a `MSG_HELLO` message to it, with `data` containing the parent actor's id.
 
