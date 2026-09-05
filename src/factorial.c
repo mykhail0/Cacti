@@ -44,10 +44,10 @@ void hello_handler(void** stateptr, size_t nbytes, void* data) {
     syserr(errno, "Cannot allocate agent's state.\n");
   }
   actor_id_t self_id = actor_id_self();
-  message_t msg_greet = {.message_type = MSG_GREET,
-                         .nbytes = sizeof self_id,
-                         .data = (void*)self_id};
-  int ret = send_message((actor_id_t)data, msg_greet);
+  int ret =
+      send_message((actor_id_t)data, (message_t){.message_type = MSG_GREET,
+                                                 .nbytes = sizeof self_id,
+                                                 .data = (void*)self_id});
   if (ret != 0 && ret != UNKNOWN_ACTOR) {
     fatal("Hello handler can't send greet message, error: %d\n", ret);
   }
@@ -70,9 +70,10 @@ void factorial_handler(void** stateptr, size_t nbytes, void* data) {
     printf("%llu\n", ((state_t*)(*stateptr))->accumulated_factorial);
   } else {
     // If not the base case, spawn the next agent.
-    message_t msg_spawn = {
-        .message_type = MSG_SPAWN, .nbytes = sizeof ROLE, .data = &ROLE};
-    int ret = send_message(actor_id_self(), msg_spawn);
+    int ret =
+        send_message(actor_id_self(), (message_t){.message_type = MSG_SPAWN,
+                                                  .nbytes = sizeof ROLE,
+                                                  .data = &ROLE});
     if (ret != 0) {
       fatal("Factorial handler can't send spawn message, error: %d\n", ret);
     }
@@ -82,12 +83,18 @@ void factorial_handler(void** stateptr, size_t nbytes, void* data) {
 // Propagate own state to the next agent.
 void greet_handler(void** stateptr, size_t nbytes, void* data) {
   (void)nbytes;
-  message_t msg_factorial = {.message_type = MSG_FACTORIAL,
-                             .nbytes = sizeof(state_t),
-                             .data = *stateptr};
-  int ret = send_message((actor_id_t)data, msg_factorial);
+  int ret =
+      send_message((actor_id_t)data, (message_t){.message_type = MSG_FACTORIAL,
+                                                 .nbytes = sizeof(state_t),
+                                                 .data = *stateptr});
   if (ret != 0) {
     fatal("Greet handler can't send factorial message, error: %d\n", ret);
+  }
+  if (0 != (ret = send_message(
+                actor_id_self(),
+                (message_t){
+                    .message_type = MSG_GODIE, .nbytes = 0, .data = NULL}))) {
+    fatal("Agent can't send self destruction message, error: %d\n", ret);
   }
 }
 
