@@ -20,4 +20,6 @@ set(CMAKE_C_FLAGS_DEBUG "-pedantic -Werror -fstack-protector-strong -g")
 add_executable(test_empty test_empty.c)
 add_test(test_empty test_empty)
 
+add_test(NAME test_factorial COMMAND ${CMAKE_SOURCE_DIR}/test/factorial/test_factorial.sh $<TARGET_FILE:factorial>)
+
 set_tests_properties(test_empty PROPERTIES TIMEOUT 1)

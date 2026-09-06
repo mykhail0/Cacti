@@ -16,23 +16,28 @@ In detail, each actor has an internal state with 2 numbers, so far accumulated
 factorial, and how many numbers are left to multiply onto it. An actor spawns
 the next actor and waits for a MSG_GREET message from it, which contains the
 spawned actor's id. This enables the parent actor to send its state to the
-spawned actor, which in turn updates its own state accordingly.
+spawned actor, which in turn updates its own state accordingly. Actors receive
+destruction messages from their children, except for the base case, where the
+final agent self destructs.
 */
 
-#define NPROMPTS 3
+#define NPROMPTS 4
 
 static void hello_handler(void** stateptr, size_t nbytes, void* data);
 static void factorial_handler(void** stateptr, size_t nbytes, void* data);
 static void greet_handler(void** stateptr, size_t nbytes, void* data);
+static void prepare_die_handler(void** stateptr, size_t nbytes, void* data);
 
 static act_t PROMPTS[NPROMPTS] = {hello_handler, factorial_handler,
-                                  greet_handler};
+                                  greet_handler, prepare_die_handler};
 static role_t ROLE = {.nprompts = NPROMPTS, .prompts = PROMPTS};
 
 static const size_t MSG_FACTORIAL = 1;
 static const size_t MSG_GREET = 2;
+static const size_t MSG_PREPARE_DIE = 3;
 
 typedef struct {
+  actor_id_t parent;
   unsigned long long accumulated_factorial;
   unsigned left;
 } state_t;
@@ -44,10 +49,12 @@ void hello_handler(void** stateptr, size_t nbytes, void* data) {
     syserr(errno, "Cannot allocate agent's state.\n");
   }
   actor_id_t self_id = actor_id_self();
+  state_t* state_ptr = (state_t*)(*stateptr);
+  state_ptr->parent = (actor_id_t)data;
   int ret =
-      send_message((actor_id_t)data, (message_t){.message_type = MSG_GREET,
-                                                 .nbytes = sizeof self_id,
-                                                 .data = (void*)self_id});
+      send_message(state_ptr->parent, (message_t){.message_type = MSG_GREET,
+                                                  .nbytes = sizeof self_id,
+                                                  .data = (void*)self_id});
   if (ret != 0 && ret != UNKNOWN_ACTOR) {
     fatal("Hello handler can't send greet message, error: %d\n", ret);
   }
@@ -57,24 +64,44 @@ void hello_handler(void** stateptr, size_t nbytes, void* data) {
 // next agent if needed.
 void factorial_handler(void** stateptr, size_t nbytes, void* data) {
   (void)nbytes;
-  // Copy parent's state.
-  *(state_t*)(*stateptr) = *(state_t*)data;
+  // Update the factorial state.
+  state_t* parent_state = (state_t*)data;
+  state_t* state_ptr = (state_t*)(*stateptr);
+  state_ptr->accumulated_factorial =
+      parent_state->accumulated_factorial * parent_state->left;
+  state_ptr->left = parent_state->left - 1;
 
-  // Update the state to the next iteration of factorial's calculation.
-  ((state_t*)(*stateptr))->accumulated_factorial *=
-      ((state_t*)(*stateptr))->left;
-  --(((state_t*)(*stateptr))->left);
+  // Now parent's state needs no use and can be freed.
+  int ret = send_message(
+      state_ptr->parent,
+      (message_t){.message_type = MSG_PREPARE_DIE, .nbytes = 0, .data = NULL});
+  if (ret != 0 && ret != UNKNOWN_ACTOR) {
+    fatal("Could not prepare parent to die.\n");
+  }
+  ret = send_message(
+      state_ptr->parent,
+      (message_t){.message_type = MSG_GODIE, .nbytes = 0, .data = NULL});
+  if (ret != 0 && ret != UNKNOWN_ACTOR) {
+    fatal("Could not kill parent.\n");
+  }
 
   if (((state_t*)(*stateptr))->left == 0) {
     // If this is base case, print the result.
-    printf("%llu\n", ((state_t*)(*stateptr))->accumulated_factorial);
+    printf("%llu\n", state_ptr->accumulated_factorial);
+    // Self clean up and destruct.
+    free(state_ptr);
+    ret = send_message(
+        actor_id_self(),
+        (message_t){.message_type = MSG_GODIE, .nbytes = 0, .data = NULL});
+    if (ret != 0) {
+      fatal("Agent can't send self destruction message, error: %d\n", ret);
+    }
   } else {
     // If not the base case, spawn the next agent.
-    int ret =
-        send_message(actor_id_self(), (message_t){.message_type = MSG_SPAWN,
-                                                  .nbytes = sizeof ROLE,
-                                                  .data = &ROLE});
-    if (ret != 0) {
+    if (0 != (ret = send_message(actor_id_self(),
+                                 (message_t){.message_type = MSG_SPAWN,
+                                             .nbytes = sizeof ROLE,
+                                             .data = &ROLE}))) {
       fatal("Factorial handler can't send spawn message, error: %d\n", ret);
     }
   }
@@ -90,12 +117,13 @@ void greet_handler(void** stateptr, size_t nbytes, void* data) {
   if (ret != 0) {
     fatal("Greet handler can't send factorial message, error: %d\n", ret);
   }
-  if (0 != (ret = send_message(
-                actor_id_self(),
-                (message_t){
-                    .message_type = MSG_GODIE, .nbytes = 0, .data = NULL}))) {
-    fatal("Agent can't send self destruction message, error: %d\n", ret);
-  }
+}
+
+// Clean up the agent's state before `MSG_GODIE`.
+void prepare_die_handler(void** stateptr, size_t nbytes, void* data) {
+  (void)nbytes;
+  (void)data;
+  free(*stateptr);
 }
 
 int main(void) {

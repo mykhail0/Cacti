@@ -1,6 +1,7 @@
 #include "cacti.h"
 
 #include <assert.h>
+// #include <stdio.h>
 // #include <bits/pthreadtypes.h>
 #include <errno.h>
 #include <pthread.h>
@@ -448,7 +449,7 @@ int actor_system_create(actor_id_t* actor, role_t* const role) {
   mutex_unlock(&(sys.act_mutex));
   mutex_unlock(&(sys.mutex));
 
-  actor_id_t placeholder = 0;
+  actor_id_t placeholder = (actor_id_t)-1;
   ret = send_message(*actor, (message_t){.message_type = MSG_HELLO,
                                          .nbytes = sizeof placeholder,
                                          .data = (void*)placeholder});
