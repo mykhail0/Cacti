@@ -98,7 +98,7 @@ void greet_handler(void** stateptr, size_t nbytes, void* data) {
   }
 }
 
-int main() {
+int main(void) {
   state_t zero_state;
   zero_state.accumulated_factorial = 1;
   scanf("%u", &(zero_state.left));

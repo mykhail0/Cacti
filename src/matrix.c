@@ -29,4 +29,4 @@ of numbers in that matrix' row. For inputs in test/test_cases/matrix.in the
 output is in test/matrix/matrix.out.
 */
 
-int main() { return 0; }
+int main(void) { return 0; }

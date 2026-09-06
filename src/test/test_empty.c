@@ -6,17 +6,17 @@
 
 int tests_run = 0;
 
-static char* empty() {
+static char* empty(void) {
   mu_assert("empty", true);
   return 0;
 }
 
-static char* all_tests() {
+static char* all_tests(void) {
   mu_run_test(empty);
   return 0;
 }
 
-int main() {
+int main(void) {
   char* result = all_tests();
   if (result != 0) {
     printf(__FILE__ ": %s\n", result);

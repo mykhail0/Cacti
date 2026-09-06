@@ -39,7 +39,7 @@ typedef long actor_id_t;
 
 // This function can be used in `act_t` functions to identify a recipient actor
 // of a given message.
-actor_id_t actor_id_self();
+extern actor_id_t actor_id_self(void);
 
 // `stateptr` is a pointer to the actor's internal state, who is handling the
 // message. This state depends on the implementation of a given calculation -

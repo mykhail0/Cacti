@@ -1,12 +1,11 @@
 #include "cacti.h"
 
 #include <assert.h>
-#include <bits/pthreadtypes.h>
+// #include <bits/pthreadtypes.h>
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -56,7 +55,7 @@ typedef struct {
   actor_id_t id;
   pthread_mutex_t mutex;
 
-  // True iff actor's id cannot be added to the queue. TODO huh?
+  // Actor's id is being added to the actor's queue or is already in it.
   bool working;
   // True iff processed MSG_GODIE.
   bool dead;
@@ -69,6 +68,7 @@ typedef struct {
 // Construct the actor. Return `0` iff an actor created successfully, an
 // errno-like error code otherwise.
 static int actor_ctor(actor_t* actor, actor_id_t id, role_t role) {
+  assert(actor != NULL);
   actor->id = id;
   actor->working = false;
   actor->dead = false;
@@ -156,23 +156,21 @@ void key_destructor(void *value) {
 
 // Adds an actor to the system.
 static int add_actor(system_t* s, actor_id_t* actor, role_t role) {
-  actor_t* act;
-  if (NULL == (act = malloc(sizeof *act))) {
+  actor_t* a;
+  if (NULL == (a = malloc(sizeof *a))) {
     syserr(errno, "Memalloc for actor failed.\n");
   }
 
-  int ret = actor_ctor(act, 0, role);
+  *actor = s->actors.filled;
+  int ret = actor_ctor(a, *actor, role);
   if (ret != 0) {
     syserr(ret, "Actor construction failed.\n");
   }
 
-  if (0 != (ret = arr_append(&(s->actors), &act))) {
-    actor_dtor(act);
+  if (0 != (ret = arr_append(&(s->actors), &a))) {
+    actor_dtor(a);
     syserr(ret, "Appending actor to array failed.\n");
   }
-
-  act->id = s->actors.filled - 1;
-  *actor = act->id;
 
   return 0;
 }
@@ -191,11 +189,11 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
   message_t message;
   // TODO was soft before
   mutex_lock(&(actor->mutex));
-  bool msg_succ = que_pop(&(actor->mailbox), &message);
+  bool msg_exists = que_pop(&(actor->mailbox), &message);
   mutex_unlock(&(actor->mutex));
 
   // Can process the actor's message after successful retrieval.
-  if (msg_succ) {
+  if (msg_exists) {
     if (message.message_type == MSG_SPAWN) {
       actor_id_t actor_to_add;
 
@@ -203,11 +201,10 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
       // TODO was soft
       mutex_lock(&(s->act_mutex));
       int ret = add_actor(s, &actor_to_add, *((role_t*)message.data));
+      mutex_unlock(&(s->act_mutex));
       if (ret != 0) {
-        mutex_unlock(&(s->act_mutex));
         syserr(ret, "Actor addition due to MSG_SPAWN failed.\n");
       }
-      mutex_unlock(&(s->act_mutex));
 
       // Sending MSG_HELLO to the new actor.
       ret = send_message(actor_to_add, (message_t){.message_type = MSG_HELLO,
@@ -220,30 +217,30 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
     } else if (message.message_type == MSG_GODIE) {
       // Changing the state of the actor.
       mutex_lock(&(actor->mutex));
-      if (!(actor->dead)) {
+      if (actor->dead) {
+        mutex_unlock(&(actor->mutex));
+      } else {
         actor->dead = true;
         mutex_unlock(&(actor->mutex));
 
         mutex_lock(&(s->mutex));
         ++(s->dead_cnt);
         mutex_unlock(&(s->mutex));
-
-      } else {
-        mutex_unlock(&(actor->mutex));
       }
     } else {
       // Setting actor_id for this thread and calling the function.
-      // Not so safe cast to void, but done as in (1)
       int ret = pthread_setspecific(thread_spec_act, (void const*)act_id);
       if (ret != 0) {
         syserr(ret, "Failed setting actor id info for the thread.\n");
       }
       if (message.message_type < 0 ||
           actor->role.nprompts <= (size_t)message.message_type) {
-        return -1;
+        fatal("Unknown message type.\n");
       }
+      // mutex_lock(&(actor->mutex));
       actor->role.prompts[message.message_type](&(actor->state), message.nbytes,
                                                 message.data);
+      // mutex_unlock(&(actor->mutex));
     }
   }
 
@@ -258,22 +255,20 @@ static int handle_actor_request(system_t* s, actor_id_t act_id) {
 
   mutex_unlock(&(actor->mutex));
 
+  mutex_lock(&(s->mutex));
   if (need_to_add) {
-    mutex_lock(&(s->mutex));
     int ret = que_push(&(s->actors_q), &act_id);
     if (ret != 0) {
       mutex_unlock(&(s->mutex));
       syserr(ret, "Failed pushing an actor's id onto an actor's queue.\n");
     }
     cond_signal(&(s->work_cond));
-    mutex_unlock(&(s->mutex));
   } else {
-    mutex_lock(&(s->mutex));
     mutex_lock(&(s->act_mutex));
     if (s->dead_cnt >= s->actors.filled) cond_signal(&(s->work_cond));
     mutex_unlock(&(s->act_mutex));
-    mutex_unlock(&(s->mutex));
   }
+  mutex_unlock(&(s->mutex));
 
   return 0;
 }
@@ -421,7 +416,7 @@ static int system_dtor(system_t* s) {
   return 0;
 }
 
-actor_id_t actor_id_self() {
+actor_id_t actor_id_self(void) {
   return (actor_id_t)pthread_getspecific(thread_spec_act);
 }
 
@@ -501,8 +496,10 @@ int send_message(actor_id_t actor, message_t message) {
     syserr(ret, "Pushing a message to actor's mailbox fail.\n");
   }
 
-  // Inserting the actor to the queue if it is not present.
-  if (!(actor_v->working)) {
+  if (actor_v->working) {
+    mutex_unlock(&(actor_v->mutex));
+  } else {
+    // Inserting the actor to the queue if it is not present.
     actor_v->working = true;
     mutex_unlock(&(actor_v->mutex));
 
@@ -513,8 +510,6 @@ int send_message(actor_id_t actor, message_t message) {
     }
     cond_signal(&(sys.work_cond));
     mutex_unlock(&(sys.mutex));
-  } else {
-    mutex_unlock(&(actor_v->mutex));
   }
 
   return 0;
