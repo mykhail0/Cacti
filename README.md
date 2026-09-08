@@ -15,7 +15,7 @@ asynchronous. In this project, the work of actors is performed by a thread pool,
 while the number of actors can be significantly larger than the number of
 threads.
 
-This library relies only on `pthreads` library for multi-threading purposes.
+This library depends only on `pthreads` library for multi-threading purposes.
 
 ## Compilation
 
