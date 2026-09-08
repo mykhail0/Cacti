@@ -12,13 +12,11 @@ typedef long message_type_t;
 // Max size of the message queue for any actor.
 #ifndef ACTOR_QUEUE_LIMIT
 #define ACTOR_QUEUE_LIMIT 1024
-// #define ACTOR_QUEUE_LIMIT 2024
 #endif
 
 // Highest number of actors possible.
 #ifndef CAST_LIMIT
 #define CAST_LIMIT 1048576
-// #define CAST_LIMIT 10000
 #endif
 
 // Number of threads in the thread pool.
@@ -59,8 +57,11 @@ typedef struct role {
 
 // Create the first actor in the system, responsible for initialization and
 // terminating the execution, and initialize the thread pool handling the actor
-// system. Return `0` iff success, a negative value otherwise. `actor` is an
-// `in` parameter.
+// system. `actor` is an `in` parameter.
+// Return `0` iff success, a negative value otherwise:
+// `EBUSY` if the system was already created,
+// various memory allocation error codes in case of failure in initializing
+// internal fields.
 extern int actor_system_create(actor_id_t* actor, role_t* const role);
 
 // Wait until the actor system to which `actor` belongs to terminates.
@@ -70,12 +71,13 @@ extern const int DEAD_ACTOR;
 extern const int UNKNOWN_ACTOR;
 extern const int SYSTEM_NOT_CREATED;
 
-// Send a given message to a given actor. Return `0` if the operation succeeds,
-// `-1` if the actor does not accept messages (TODO MSG_GODIE), `-2` if the
-// actor with the specified identifier is not in the system. Sending a message
-// means pushing it onto the actor's message queue (TODO limit?). The actor will
-// then, at some point, handle the message, by calling a function handling that
-// message type, which is provided in the actor's role.
+// Send a given message to a given actor.
+// Return `0` if the operation succeeds,
+// `DEAD_ACTOR == -1` if the actor does not accept messages (MSG_GODIE),
+// `UNKNOWN_ACTOR == -2` if the actor with the specified identifier is not in
+// the system,
+// `SYSTEM_NOT_CREATED == -3` if the system was not created,
+// `EAGAIN` if the recipient's message queue is full.
 extern int send_message(actor_id_t actor, message_t message);
 
 #endif

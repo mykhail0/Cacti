@@ -12,7 +12,7 @@ static inline void* get_element_ptr(queue_t* q, size_t i) {
   return ((unsigned char*)q->arr) + i * q->size;
 }
 
-int que_ctor(queue_t* q, size_t size, size_t max_capacity) {
+int q_create(queue_t* q, size_t size, size_t max_capacity) {
   assert(max_capacity > 0);
   assert(size > 0);
   q->MAX_CAPACITY = max_capacity;
@@ -33,7 +33,7 @@ int que_ctor(queue_t* q, size_t size, size_t max_capacity) {
   return 0;
 }
 
-void que_dtor(queue_t* q) {
+void q_destroy(queue_t* q) {
   free(q->arr);
   q->arr = NULL;
   q->empty = true;
@@ -45,7 +45,7 @@ void que_dtor(queue_t* q) {
 // Reallocates the queues's cyclic buffer if needed.
 // Returns `0` iff the reallocation was successful or was not needed, an
 // errno-like error code otherwise.
-static int que_reall(queue_t* q) {
+static int q_realloc(queue_t* q) {
   if (q->empty || q->head != q->tail) return 0;
   if (q->capacity == q->MAX_CAPACITY) return EAGAIN;
 
@@ -73,9 +73,9 @@ static int que_reall(queue_t* q) {
   return 0;
 }
 
-int que_push(queue_t* q, void const* element) {
+int q_push(queue_t* q, void const* element) {
   assert(q->capacity > 0);
-  int ret = que_reall(q);
+  int ret = q_realloc(q);
   if (ret != 0) return ret;
   memcpy(get_element_ptr(q, q->tail), element, q->size);
   q->tail = (q->tail + 1) % q->capacity;
@@ -83,7 +83,7 @@ int que_push(queue_t* q, void const* element) {
   return 0;
 }
 
-bool que_pop(queue_t* q, void* element) {
+bool q_pop(queue_t* q, void* element) {
   if (q->empty) return false;
   memcpy(element, get_element_ptr(q, q->head), q->size);
   q->head = (q->head + 1) % q->capacity;

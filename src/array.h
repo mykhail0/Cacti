@@ -21,16 +21,16 @@ typedef struct {
 
 // Array constructor.
 // Return `0` iff initialized successfully, an errno-like error code otherwise.
-extern int arr_ctor(array_t* arr, size_t size, size_t max_capacity);
+extern int array_create(array_t* arr, size_t size, size_t max_capacity);
 
 // Array destructor.
-extern void arr_dtor(array_t* arr);
+extern void array_destroy(array_t* arr);
 
 // Return a pointer to the i'th element in a given array.
-extern void* arr_at(array_t* arr, size_t i);
+extern void* array_at(array_t* arr, size_t i);
 
 // Append an element to the end of the array.
 // Return `0` iff appended successfully, an errno-like error code otherwise.
-extern int arr_append(array_t* arr, void const* element_ptr);
+extern int array_append(array_t* arr, void const* element_ptr);
 
 #endif  // ARRAY_H

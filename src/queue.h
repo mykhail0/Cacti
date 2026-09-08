@@ -23,17 +23,17 @@ typedef struct {
 
 // Initialize an empty queue.
 // Return `0` iff created successfully, an errno-like error code otherwise.
-extern int que_ctor(queue_t* q, size_t size, size_t max_capacity);
+extern int q_create(queue_t* q, size_t size, size_t max_capacity);
 
 // Clear the queue. Needs to be initiated again if the user intends to reuse.
-extern void que_dtor(queue_t* q);
+extern void q_destroy(queue_t* q);
 
 // Pushes an element onto a given queue.
 // Returns `0` iff pushed successfully, an errno-like error code otherwise.
-extern int que_push(queue_t* q, void const* element);
+extern int q_push(queue_t* q, void const* element);
 
 // Pops an element from the queue.
 // Return `true` on success, `false` if the queue is empty.
-extern bool que_pop(queue_t* q, void* element);
+extern bool q_pop(queue_t* q, void* element);
 
 #endif  // QUEUE_H
