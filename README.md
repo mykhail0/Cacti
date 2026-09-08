@@ -36,9 +36,7 @@ Project contains a [matrix](src/matrix.c) program, which calculates sums of rows
 of a given array and a [factorial](src/factorial.c) program, which calculates
 a factorial of a given number. Both these programs illustrate the use of the
 actor library developed in this project. What they do is documented inside the
-files.
-
-TODO how to run these
+files. They can be run in the build directory after using `make`.
 
 ## Thread pool
 
@@ -48,9 +46,9 @@ terminated automatically when every actor finishes functioning.
 
 ## Actor model
 
-The library's interface is defined in the [header](src/cacti.h).
-TODO The library assumes there is at most one actor system active at a time.
-After an actor system terminates, it is possible to start another one.
+The library's interface is defined in the [header](src/cacti.h). The library
+assumes there is at most one actor system active at a time. After the actor
+system terminates, it is possible to start another one.
 
 ### Message types
 

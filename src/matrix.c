@@ -182,6 +182,11 @@ int main(void) {
   actor_system_join(spawner);
   for (size_t i = 0; i < row_sums.filled; ++i) {
     printf("%d\n", *(int*)array_at(&row_sums, i));
+    array_destroy(array_at(&matrix, i));
   }
+  array_destroy(&messages);
+  array_destroy(&row_sums);
+  array_destroy(&matrix);
+
   return 0;
 }
