@@ -1,2 +1,0 @@
-obsluga sygnalow
-check TODOs in code
