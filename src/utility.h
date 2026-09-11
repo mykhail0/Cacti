@@ -3,6 +3,8 @@
 
 #include <pthread.h>
 
+// Wrappers for pthread functions with panicking error handling.
+
 extern void join(pthread_t thread);
 
 extern void mutex_attr_destroy(pthread_mutexattr_t* attr);

@@ -14,6 +14,15 @@
 #include "queue.h"
 #include "utility.h"
 
+const int DEAD_ACTOR = -1;
+const int UNKNOWN_ACTOR = -2;
+const int SYSTEM_NOT_CREATED = -3;
+const int SYSTEM_SHUTDOWN = -4;
+
+// An object used for initializing all mutexes in the program.
+// Controls how mutexes behave, useful for debugging.
+static pthread_mutexattr_t attr;
+
 // ACTOR_T
 
 typedef struct {
@@ -29,10 +38,6 @@ typedef struct {
   role_t role;
   void* state;
 } actor_t;
-
-// An object used for initializing all mutexes in the program.
-// Controls how mutexes behave, useful for debugging.
-static pthread_mutexattr_t attr;
 
 // Construct the actor. Return `0` iff an actor created successfully, an
 // errno-like error code otherwise.
@@ -237,6 +242,7 @@ static void make_actor_handle_message(system_t* s, actor_id_t actor_id) {
   mutex_unlock(&(actor->mutex));
 }
 
+// Dedicated thread handling SIGINT.
 static void* signal_handler(void* arg) {
   sigset_t* blocked = arg;
   assert(blocked != NULL);
@@ -458,11 +464,6 @@ static void add_actor_to_queue(system_t* s, actor_id_t* actor) {
   cond_signal(&(s->work_cond));
   mutex_unlock(&(s->mutex));
 }
-
-const int DEAD_ACTOR = -1;
-const int UNKNOWN_ACTOR = -2;
-const int SYSTEM_NOT_CREATED = -3;
-const int SYSTEM_SHUTDOWN = -4;
 
 int send_message(actor_id_t actor, message_t message) {
   if (!sys.created) return SYSTEM_NOT_CREATED;
