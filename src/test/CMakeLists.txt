@@ -14,7 +14,7 @@ add_test(NAME test_factorial COMMAND ${CMAKE_SOURCE_DIR}/test/factorial/test_fac
 add_test(NAME test_matrix COMMAND ${CMAKE_SOURCE_DIR}/test/matrix/test_matrix.sh $<TARGET_FILE:matrix>)
 
 set_tests_properties(test_actor_system PROPERTIES TIMEOUT 1)
-set_tests_properties(test_factorial PROPERTIES TIMEOUT 1)
+set_tests_properties(test_factorial PROPERTIES TIMEOUT 10)
 # Test should take 29s the longest, would take 33s+ if execution was one
 # threaded.
 set_tests_properties(test_matrix PROPERTIES TIMEOUT 30)

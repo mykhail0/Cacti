@@ -75,7 +75,7 @@ typedef struct {
   // True iff functioning system exists.
   bool created;
 
-  // Guards work_cond, actors_q and dead_cnt.
+  // Guards work_cond, actors_q, shutdown and dead_cnt.
   pthread_mutex_t mutex;
 
   // Threads wait for work on this condition.
@@ -84,6 +84,7 @@ typedef struct {
   // Queue of type actor_id_t.
   queue_t actors_q;
 
+  bool shutdown;
   size_t dead_cnt;
 
   // Guards actors.
@@ -94,6 +95,7 @@ typedef struct {
 } system_t;
 
 static system_t sys;
+static sigset_t SIGINT_set;
 
 // Thread specific data, actor_id of current thread,
 // set before calling funcs from role.
@@ -138,7 +140,15 @@ static actor_t* get_actor(system_t* s, actor_id_t actor) {
   return actor_v;
 }
 
-static void msg_spawn_handler(system_t* s, actor_id_t actor, role_t role) {
+static bool is_shutdown(system_t* s) {
+  mutex_lock(&(s->mutex));
+  bool shutdown = s->shutdown;
+  mutex_unlock(&(s->mutex));
+  return shutdown;
+}
+
+static int msg_spawn_handler(system_t* s, actor_id_t actor, role_t role) {
+  if (is_shutdown(s)) return SYSTEM_SHUTDOWN;
   actor_id_t actor_to_add;
   int ret = add_actor(s, &actor_to_add, role);
   if (ret != 0) syserr(ret, "Actor addition due to MSG_SPAWN failed.\n");
@@ -150,6 +160,7 @@ static void msg_spawn_handler(system_t* s, actor_id_t actor, role_t role) {
   if (ret != 0) {
     fatal("Couldn't send a MSG_HELLO message to the spawned actor: %d.\n", ret);
   }
+  return 0;
 }
 
 static void msg_godie_handler(system_t* s, actor_t* actor) {
@@ -226,6 +237,20 @@ static void make_actor_handle_message(system_t* s, actor_id_t actor_id) {
   mutex_unlock(&(actor->mutex));
 }
 
+static void* signal_handler(void* arg) {
+  sigset_t* blocked = arg;
+  assert(blocked != NULL);
+  int sig;
+  int ret = sigwait(blocked, &sig);
+  if (ret != 0) syserr(ret, "sigwait fail.\n");
+  assert(sig == SIGINT);
+  mutex_lock(&(sys.mutex));
+  sys.shutdown = true;
+  cond_signal(&(sys.work_cond));
+  mutex_unlock(&(sys.mutex));
+  return NULL;
+}
+
 // Working function of a thread.
 static void* work_func(void* arg) {
   system_t* s = arg;
@@ -234,9 +259,10 @@ static void* work_func(void* arg) {
   while (true) {
     mutex_lock(&(s->mutex));
     mutex_lock(&(s->act_mutex));
-    // Wait untill there is work or all actors are dead.
+    // Wait untill there is work or it is known that work won't come.
     while (s->actors_q.empty &&
-           (s->dead_cnt < s->actors.filled || s->dead_cnt == 0)) {
+           (s->dead_cnt < s->actors.filled || s->dead_cnt == 0) &&
+           !s->shutdown) {
       mutex_unlock(&(s->act_mutex));
       if (pthread_cond_wait(&(s->work_cond), &(s->mutex)) != 0) {
         fatal("pthread_cond_wait() should never return an error code.\n");
@@ -244,8 +270,11 @@ static void* work_func(void* arg) {
       mutex_lock(&(s->act_mutex));
     }
 
-    // Can end work because processed all requests and all actors are dead.
-    if (s->actors_q.empty && s->dead_cnt >= s->actors.filled) break;
+    // Can end work because processed all requests, and either all actors are
+    // dead or the system shutdown was requested.
+    if (s->actors_q.empty && (s->dead_cnt >= s->actors.filled || s->shutdown)) {
+      break;
+    }
 
     mutex_unlock(&(s->act_mutex));
 
@@ -267,12 +296,38 @@ static void* work_func(void* arg) {
   return NULL;
 }
 
+// Clean up the actor system after failing to spawn a thread.
+static void fail_pthread_create_cleanup(system_t* s, int return_code) {
+  clear_actor_array(&(s->actors));
+  array_destroy(&(s->actors));
+  q_destroy(&(s->actors_q));
+  pthread_cond_destroy(&(s->work_cond));
+  pthread_mutex_destroy(&(s->mutex));
+  pthread_mutex_destroy(&(s->act_mutex));
+  syserr(return_code, "pthread_create() fail.\n");
+}
+
+static void block_on_sigint(sigset_t* blocked) {
+  sigset_t old;
+  int ret = sigemptyset(blocked);
+  if (ret != 0) syserr(errno, "sigemptyset fail.\n");
+  if (0 != (ret = sigaddset(blocked, SIGINT))) {
+    syserr(errno, "sigaddset fail.\n");
+  }
+  if (0 != (ret = pthread_sigmask(SIG_BLOCK, blocked, &old))) {
+    syserr(ret, "sigprocmask fail.\n");
+  }
+}
+
 static int system_create(system_t* s) {
   assert(s != NULL);
   if (s->created) return EBUSY;
 
+  s->shutdown = false;
   s->created = false;
   s->dead_cnt = 0;
+
+  block_on_sigint(&SIGINT_set);
 
   int ret = pthread_mutex_init(&(s->act_mutex), &attr);
   if (ret != 0) {
@@ -304,16 +359,15 @@ static int system_create(system_t* s) {
   }
 
   s->created = true;
-  for (size_t i = 0; i < POOL_SIZE; ++i) {
+  ret = pthread_create(&(s->threads[0]), NULL, signal_handler, &SIGINT_set);
+  if (ret != 0) fail_pthread_create_cleanup(s, ret);
+  for (size_t i = 1; i < POOL_SIZE; ++i) {
     if (0 != (ret = pthread_create(&(s->threads[i]), NULL, work_func, s))) {
-      // TODO join on previous threads
-      clear_actor_array(&(s->actors));
-      array_destroy(&(s->actors));
-      q_destroy(&(s->actors_q));
-      pthread_cond_destroy(&(s->work_cond));
-      pthread_mutex_destroy(&(s->mutex));
-      pthread_mutex_destroy(&(s->act_mutex));
-      syserr(ret, "pthread_create() fail.\n");
+      kill(getpid(), SIGINT);
+      for (size_t j = 1; j < i; ++j) {
+        pthread_join(s->threads[j], NULL);
+      }
+      fail_pthread_create_cleanup(s, ret);
     }
   }
 
@@ -328,6 +382,7 @@ static void cleanup_globals() {
 }
 
 int actor_system_create(actor_id_t* actor, role_t* const role) {
+  if (POOL_SIZE < 2) fatal("Minimum number of threads should be 2.");
   int ret = pthread_key_create(&thread_specific_actor_id, NULL);
   if (ret != 0) {
     syserr(ret, "PTHREAD_KEYS_MAX keys are already allocated.\n");
@@ -368,9 +423,11 @@ static void system_destroy(system_t* s) {
   if (s == NULL) return;
 
   bool success = true;
-  for (size_t i = 0; i < POOL_SIZE; ++i) {
+  for (size_t i = 1; i < POOL_SIZE; ++i) {
     success = pthread_join(s->threads[i], NULL) == 0 && success;
   }
+  success = kill(getpid(), SIGINT) == 0 && success;
+  success = pthread_join(s->threads[0], NULL) == 0 && success;
 
   success = pthread_cond_destroy(&(s->work_cond)) == 0 && success;
   q_destroy(&(s->actors_q));
@@ -405,12 +462,14 @@ static void add_actor_to_queue(system_t* s, actor_id_t* actor) {
 const int DEAD_ACTOR = -1;
 const int UNKNOWN_ACTOR = -2;
 const int SYSTEM_NOT_CREATED = -3;
+const int SYSTEM_SHUTDOWN = -4;
 
 int send_message(actor_id_t actor, message_t message) {
   if (!sys.created) return SYSTEM_NOT_CREATED;
   if (actor < 0) return UNKNOWN_ACTOR;
   actor_t* actor_v = get_actor(&sys, actor);
   if (actor_v == NULL) return UNKNOWN_ACTOR;
+  if (is_shutdown(&sys)) return SYSTEM_SHUTDOWN;
 
   mutex_lock(&(actor_v->mutex));
   if (actor_v->dead) {

@@ -75,7 +75,7 @@ void hello_handler(void** stateptr, size_t nbytes, void* data) {
   if (NULL == (*stateptr = malloc(sizeof(size_t)))) {
     syserr(errno, "Couldn't malloc actor's state.\n");
   }
-  int* state = *(int**)stateptr;
+  size_t* state = *(size_t**)stateptr;
   *state = 0;
   int ret =
       send_message((actor_id_t)data, (message_t){.message_type = MSG_READY});
@@ -117,9 +117,10 @@ void pass_handler(void** stateptr, size_t nbytes, void* data) {
 void ready_handler(void** stateptr, size_t nbytes, void* data) {
   (void)data;
   (void)nbytes;
-  int* ready = *(int**)stateptr;
+  size_t* ready = *(size_t**)stateptr;
   ++(*ready);
   if ((size_t)*ready == actors) {
+    free(ready);
     suicide();
     for (size_t i = 0; i < matrix.filled; ++i) {
       int ret = send_message(1, (message_t){.message_type = MSG_PASS,

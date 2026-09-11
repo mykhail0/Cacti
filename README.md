@@ -97,7 +97,6 @@ depend on the user and the type of calculations that need to be performed.
 
 ## `SIGINT`
 
-TODO send MSG_GODIE or can this make some deadlock or sth?
-The program will block the possibility of adding new actors and accepting
-messages. Next, the actor system will complete handling all messages sent to
-actors and terminate the system.
+After receiving `SIGINT` signal the system disallows addition of new actors and
+receiving messages for existing actors. Next, the actor system will complete
+handling all messages sent to actors and will terminate the system.

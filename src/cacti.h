@@ -20,6 +20,7 @@ typedef long message_type_t;
 #endif
 
 // Number of threads in the thread pool.
+// Note, that one of these threads is exclusively used to handle SIGINT signals.
 #ifndef POOL_SIZE
 #define POOL_SIZE 3
 #endif
@@ -70,13 +71,16 @@ extern void actor_system_join(actor_id_t actor);
 extern const int DEAD_ACTOR;
 extern const int UNKNOWN_ACTOR;
 extern const int SYSTEM_NOT_CREATED;
+extern const int SYSTEM_SHUTDOWN;
 
 // Send a given message to a given actor.
 // Return `0` if the operation succeeds,
 // `DEAD_ACTOR == -1` if the actor does not accept messages (MSG_GODIE),
 // `UNKNOWN_ACTOR == -2` if the actor with the specified identifier is not in
 // the system,
-// `SYSTEM_NOT_CREATED == -3` if the system was not created,
+// `SYSTEM_NOT_CREATED == -3` if actor_system_create() was not called
+// successfully beforehand,
+// `SYSTEM_SHUTDOWN == -4` if a SIGINT signal was received,
 // `EAGAIN` if the recipient's message queue is full.
 extern int send_message(actor_id_t actor, message_t message);
 
