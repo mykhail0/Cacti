@@ -44,8 +44,10 @@ extern actor_id_t actor_id_self(void);
 // message. This state depends on the implementation of a given calculation -
 // actors in different systems or with different roles may use different formats
 // of internal state. `nbytes` is the size of `data` as a number of bytes.
-// `data` is a pointer to a fragment of a global state that can be read and
-// modified by this function.
+// `data` may be a pointer to a fragment of a global state that can be read and
+// modified by this function or it may be an integer type that can fit in void*.
+// Same `data` as in `message_t`, so depends on the user defined protocol what
+// it is.
 typedef void (*const act_t)(void** stateptr, size_t nbytes, void* data);
 
 typedef struct role {

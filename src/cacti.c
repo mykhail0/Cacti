@@ -302,15 +302,15 @@ static void* work_func(void* arg) {
   return NULL;
 }
 
-// Clean up the actor system after failing to spawn a thread.
-static void fail_pthread_create_cleanup(system_t* s, int return_code) {
+// Clean up the actor system after something failed. Cleans everything besides
+// threads.
+static void system_cleanup(system_t* s) {
   clear_actor_array(&(s->actors));
   array_destroy(&(s->actors));
   q_destroy(&(s->actors_q));
   pthread_cond_destroy(&(s->work_cond));
   pthread_mutex_destroy(&(s->mutex));
   pthread_mutex_destroy(&(s->act_mutex));
-  syserr(return_code, "pthread_create() fail.\n");
 }
 
 static void block_on_sigint(sigset_t* blocked) {
@@ -366,14 +366,18 @@ static int system_create(system_t* s) {
 
   s->created = true;
   ret = pthread_create(&(s->threads[0]), NULL, signal_handler, &SIGINT_set);
-  if (ret != 0) fail_pthread_create_cleanup(s, ret);
+  if (ret != 0) {
+    system_cleanup(s);
+    syserr(ret, "pthread_create() fail.\n");
+  }
   for (size_t i = 1; i < POOL_SIZE; ++i) {
     if (0 != (ret = pthread_create(&(s->threads[i]), NULL, work_func, s))) {
       kill(getpid(), SIGINT);
-      for (size_t j = 1; j < i; ++j) {
+      for (size_t j = 0; j < i; ++j) {
         pthread_join(s->threads[j], NULL);
       }
-      fail_pthread_create_cleanup(s, ret);
+      system_cleanup(s);
+      syserr(ret, "pthread_create() fail.\n");
     }
   }
 
@@ -385,6 +389,19 @@ static void cleanup_globals() {
   bool success = pthread_mutexattr_destroy(&attr) == 0;
   success = pthread_key_delete(thread_specific_actor_id) == 0 && success;
   if (!success) fatal("Some global cleanup failed.\n");
+}
+
+// Forcefully clean up everything.
+static void cleanup(system_t* s) {
+  if (s == NULL) return;
+
+  kill(getpid(), SIGINT);
+  for (size_t i = 0; i < POOL_SIZE; ++i) {
+    pthread_join(s->threads[i], NULL);
+  }
+
+  system_cleanup(s);
+  cleanup_globals();
 }
 
 int actor_system_create(actor_id_t* actor, role_t* const role) {
@@ -410,7 +427,7 @@ int actor_system_create(actor_id_t* actor, role_t* const role) {
     fatal("System creation failed.\n");
   }
   if (0 != (ret = add_actor(&sys, actor, *role))) {
-    cleanup_globals();
+    cleanup(&sys);
     fatal("Failed to add initial actor.\n");
   }
 
@@ -419,13 +436,14 @@ int actor_system_create(actor_id_t* actor, role_t* const role) {
                                          .nbytes = sizeof placeholder,
                                          .data = (void*)placeholder});
   if (ret != 0) {
+    cleanup(&sys);
     fatal("A MSG_HELLO message to the initial actor not sent: %d.\n", ret);
   }
 
   return 0;
 }
 
-static void system_destroy(system_t* s) {
+static void system_join(system_t* s) {
   if (s == NULL) return;
 
   bool success = true;
@@ -450,7 +468,7 @@ static void system_destroy(system_t* s) {
 
 void actor_system_join(actor_id_t actor) {
   if (actor < 0 || sys.actors.filled <= (size_t)actor) return;
-  system_destroy(&sys);
+  system_join(&sys);
   cleanup_globals();
 }
 
